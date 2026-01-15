@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>סנובורד אקסטרים - הבחירה הגורלית</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;700;900&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #e0f7fa; /* צבע שמיים/שלג */
+            font-family: 'Rubik', sans-serif;
+            touch-action: none; /* מניעת גלילה במובייל */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* ממשק משתמש */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(5px);
+            transition: opacity 0.3s;
+            z-index: 10;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 3rem;
+            color: #0277bd;
+            text-shadow: 2px 2px 0px #fff;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            color: #455a64;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .btn-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-family: 'Rubik', sans-serif;
+            font-weight: bold;
+            transition: transform 0.1s, box-shadow 0.1s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        #btn-snowboard {
+            background: linear-gradient(135deg, #00c6ff, #0072ff);
+            color: white;
+            border: 4px solid #fff;
+        }
+
+        #btn-ski {
+            background: linear-gradient(135deg, #ff9966, #ff5e62);
+            color: white;
+            border: 4px solid #fff;
+        }
+
+        #score-board {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #01579b;
+            z-index: 5;
+            background: rgba(255,255,255,0.7);
+            padding: 5px 15px;
+            border-radius: 20px;
+            pointer-events: none;
+            display: none; /* מוסתר עד שמתחילים */
+        }
+        
+        #instructions-overlay {
+            position: absolute;
+            bottom: 20%;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            color: #01579b;
+            font-weight: bold;
+            font-size: 1.2rem;
+            opacity: 0;
+            transition: opacity 0.5s;
+            text-shadow: 1px 1px 0 #fff;
+        }
+
+        .blink {
+            animation: blinker 1.5s linear infinite;
+        }
+
+        @keyframes blinker {
+            50% { opacity: 0; }
+        }
+
+        /* הודעות מיוחדות */
+        .message-box {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            max-width: 80%;
+        }
+        
+        .emoji-icon {
+            font-size: 4rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        #restart-btn {
+            background: #4caf50;
+            color: white;
+            margin-top: 20px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- קנבס המשחק -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- תצוגת ניקוד -->
+    <div id="score-board">ניקוד: 0</div>
+    
+    <!-- הוראות התחלה -->
+    <div id="instructions-overlay">
+        <p class="blink">לחץ בכל מקום כדי להתחיל לגלוש!</p>
+        <p style="font-size: 0.9em; margin-top: 5px;">גרירה לזוז | טאפ לקפוץ</p>
+    </div>
+
+    <!-- מסך פתיחה -->
+    <div id="start-screen" class="ui-layer">
+        <div class="message-box">
+            <span class="emoji-icon">🏔️</span>
+            <h1>משחק ההר המושלג</h1>
+            <h2>בחר את הכלי שלך כדי להתחיל:</h2>
+            <div class="btn-container">
+                <button id="btn-snowboard">🏂 סנובורד</button>
+                <button id="btn-ski">⛷️ סקי</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- מסך סוף משחק (התרסקות) -->
+    <div id="game-over-screen" class="ui-layer hidden">
+        <div class="message-box">
+            <span class="emoji-icon">💥</span>
+            <h1>אוי לא! התרסקת!</h1>
+            <h2 id="final-score">ניקוד סופי: 0</h2>
+            <button id="restart-btn" onclick="resetGame()">נסה שוב</button>
+        </div>
+    </div>
+
+    <!-- מסך סוף משחק (בחירה בסקי) -->
+    <div id="ski-fail-screen" class="ui-layer hidden">
+        <div class="message-box">
+            <span class="emoji-icon">🚫</span>
+            <h1>פסילה מיידית!</h1>
+            <h2>גולשי סקי לא רצויים כאן...<br>זה משחק למגניבים בלבד! 😉</h2>
+            <button id="restart-from-ski" onclick="resetToMenu()">חזור לבחור נכון</button>
+        </div>
+    </div>
+
+    <script>
+        // --- הגדרות משחק ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // מצבי משחק: MENU, READY, PLAYING, GAMEOVER
+        let gameState = 'MENU'; 
+        let score = 0;
+        let speed = 0;
+        let animationId;
+        
+        // הגדרות שחקן
+        const player = {
+            x: 0,
+            y: 0,
+            z: 0, // גובה לקפיצה
+            vz: 0, // מהירות אנכית
+            width: 30,
+            height: 50,
+            speedX: 0,
+            maxSpeedX: 8,
+            friction: 0.92,
+            angle: 0,
+            isJumping: false
+        };
+
+        const GRAVITY = 0.8;
+        const JUMP_STRENGTH = 12;
+
+        // מערכים לאובייקטים
+        let obstacles = [];
+        let particles = [];
+
+        // קלט
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            Space: false
+        };
+
+        // התאמת גודל מסך
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // איפוס מיקום שחקן למרכז אם אנחנו לא במשחק פעיל
+            if (gameState === 'MENU' || gameState === 'READY') {
+                player.x = canvas.width / 2;
+                player.y = canvas.height * 0.25;
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // --- לוגיקה של ממשק ---
+        
+        document.getElementById('btn-snowboard').addEventListener('click', prepareGame);
+        document.getElementById('btn-ski').addEventListener('click', triggerSkiFail);
+
+        function triggerSkiFail() {
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('ski-fail-screen').classList.remove('hidden');
+        }
+
+        function resetToMenu() {
+            document.getElementById('ski-fail-screen').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+        }
+
+        function resetGame() {
+            document.getElementById('game-over-screen').classList.add('hidden');
+            prepareGame();
+        }
+
+        // שלב 1: הצגת השחקן ומוכנות
+        function prepareGame() {
+            gameState = 'READY';
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('score-board').style.display = 'block';
+            document.getElementById('score-board').innerText = 'ניקוד: 0';
+            document.getElementById('instructions-overlay').style.opacity = '1';
+            
+            // איפוס
+            player.x = canvas.width / 2;
+            player.y = canvas.height * 0.25;
+            player.speedX = 0;
+            player.angle = 0;
+            player.z = 0;
+            obstacles = [];
+            particles = [];
+            score = 0;
+
+            // התחלת ציור (ללא לוגיקת משחק)
+            if (animationId) cancelAnimationFrame(animationId);
+            gameLoop();
+        }
+
+        // שלב 2: תחילת גלישה בפועל
+        function startSliding() {
+            if (gameState === 'READY') {
+                gameState = 'PLAYING';
+                speed = 5;
+                document.getElementById('instructions-overlay').style.opacity = '0';
+            }
+        }
+
+        function gameOver() {
+            gameState = 'GAMEOVER';
+            document.getElementById('score-board').style.display = 'none';
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('final-score').innerText = 'ניקוד סופי: ' + Math.floor(score);
+        }
+
+        // --- בקרת שליטה ---
+        
+        // מקלדת
+        window.addEventListener('keydown', (e) => {
+            if (gameState === 'READY') {
+                startSliding();
+                return;
+            }
+            if (keys.hasOwnProperty(e.code)) keys[e.code] = true;
+            if (e.code === 'Space' || e.code === 'ArrowUp') jump();
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.code)) keys[e.code] = false;
+        });
+
+        // מובייל (טאץ')
+        let touchStartX = 0;
+        let touchStartTime = 0;
+        let isTouching = false;
+
+        window.addEventListener('touchstart', (e) => {
+            if (gameState === 'READY') {
+                startSliding();
+                return;
+            }
+            if (gameState !== 'PLAYING') return;
+
+            isTouching = true;
+            touchStartX = e.touches[0].clientX;
+            touchStartTime = Date.now();
+        }, {passive: false});
+
+        window.addEventListener('touchmove', (e) => {
+            if (!isTouching || gameState !== 'PLAYING') return;
+            e.preventDefault(); 
+            
+            const touchX = e.touches[0].clientX;
+            const diff = touchX - touchStartX;
+            
+            // רגישות למגע - הזזה
+            if (diff > 5) { keys.ArrowRight = true; keys.ArrowLeft = false; }
+            else if (diff < -5) { keys.ArrowLeft = true; keys.ArrowRight = false; }
+            
+            // עדכון נקודת הייחוס לגרירה חלקה
+            // לא מאפסים לגמרי כדי לשמור על מומנטום, אבל עוזר לשלוט
+            touchStartX = touchX; 
+        }, {passive: false});
+
+        window.addEventListener('touchend', (e) => {
+            keys.ArrowLeft = false;
+            keys.ArrowRight = false;
+            isTouching = false;
+
+            // זיהוי טאפ (קפיצה)
+            const touchDuration = Date.now() - touchStartTime;
+            if (touchDuration < 200) { // טאפ קצר
+                jump();
+            }
+        });
+        
+        // קליק בעכבר להתחלה
+        window.addEventListener('mousedown', () => {
+             if (gameState === 'READY') startSliding();
+        });
+
+        function jump() {
+            if (gameState === 'PLAYING' && !player.isJumping) {
+                player.isJumping = true;
+                player.vz = JUMP_STRENGTH;
+            }
+        }
+
+        // --- לוגיקה ---
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameState === 'PLAYING') {
+                updateGameLogic();
+            } else if (gameState === 'READY') {
+                // רק אנימציית המתנה קלה
+                player.y = (canvas.height * 0.25) + Math.sin(Date.now() / 300) * 5;
+            }
+
+            draw();
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        function updateGameLogic() {
+            // ניקוד
+            score += 0.1;
+            document.getElementById('score-board').innerText = 'ניקוד: ' + Math.floor(score);
+
+            // מהירות משחק
+            if (speed < 18) speed += 0.005;
+
+            // תנועת שחקן X
+            if (keys.ArrowLeft) player.speedX -= 0.8;
+            if (keys.ArrowRight) player.speedX += 0.8;
+
+            player.speedX *= player.friction;
+            player.x += player.speedX;
+            player.angle = player.speedX * 3;
+
+            // תנועת שחקן Z (קפיצה)
+            if (player.isJumping) {
+                player.z += player.vz;
+                player.vz -= GRAVITY;
+
+                if (player.z <= 0) {
+                    player.z = 0;
+                    player.vz = 0;
+                    player.isJumping = false;
+                }
+            }
+
+            // גבולות
+            if (player.x < 0) { player.x = 0; player.speedX *= -0.5; }
+            if (player.x > canvas.width) { player.x = canvas.width; player.speedX *= -0.5; }
+
+            // חלקיקים (רק אם על הקרקע)
+            if (Math.random() < 0.5 && player.z < 5) {
+                particles.push({
+                    x: player.x,
+                    y: player.y + 20,
+                    size: Math.random() * 5 + 2,
+                    life: 1,
+                    speedY: -speed * 0.5
+                });
+            }
+
+            // יצירת מכשולים
+            if (Math.random() < 0.03 + (score / 10000)) {
+                const type = Math.random();
+                let obsType = 'tree';
+                let obsWidth = 40;
+                let obsHeight = 60; // גובה פיזי בפיקסלים לציור
+                let obsZHeight = 100; // גובה התנגשות (האם אפשר לקפוץ מעל)
+                
+                if (type > 0.8) { 
+                    obsType = 'rock'; obsWidth = 30; obsHeight = 20; obsZHeight = 25; // אפשר לקפוץ מעל
+                }
+                else if (type > 0.95) { 
+                    obsType = 'snowman'; obsWidth = 35; obsHeight = 50; obsZHeight = 35; // קשה אבל אפשרי לקפוץ
+                }
+
+                obstacles.push({
+                    x: Math.random() * canvas.width,
+                    y: canvas.height + 50,
+                    width: obsWidth,
+                    height: obsHeight,
+                    zHeight: obsZHeight,
+                    type: obsType
+                });
+            }
+
+            // עדכון מכשולים
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let obs = obstacles[i];
+                obs.y -= speed;
+
+                // בדיקת התנגשות
+                // אם גובה השחקן נמוך מגובה המכשול -> התנגשות
+                if (player.z < obs.zHeight) {
+                    // תיבת התנגשות מצומצמת
+                    if (
+                        player.x - player.width/2.5 < obs.x + obs.width/2 &&
+                        player.x + player.width/2.5 > obs.x - obs.width/2 &&
+                        player.y - player.height/3 < obs.y + obs.height/2 &&
+                        player.y + player.height/3 > obs.y - obs.height/2
+                    ) {
+                        gameOver();
+                    }
+                }
+
+                if (obs.y < -100) obstacles.splice(i, 1);
+            }
+
+            // עדכון חלקיקים
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.y -= speed * 0.8;
+                p.life -= 0.02;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function draw() {
+            // חלקיקים
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+
+            // מכשולים
+            obstacles.forEach(obs => {
+                ctx.save();
+                ctx.translate(obs.x, obs.y);
+                
+                // צל מכשול
+                ctx.fillStyle = 'rgba(0,0,0,0.1)';
+                ctx.beginPath();
+                ctx.ellipse(5, obs.height/2 - 2, obs.width/1.5, 8, 0, 0, Math.PI*2);
+                ctx.fill();
+
+                if (obs.type === 'tree') {
+                    ctx.fillStyle = '#2e7d32';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -obs.height/2);
+                    ctx.lineTo(obs.width/2, obs.height/2);
+                    ctx.lineTo(-obs.width/2, obs.height/2);
+                    ctx.fill();
+                } else if (obs.type === 'rock') {
+                    ctx.fillStyle = '#78909c';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, obs.width/2, 0, Math.PI*2);
+                    ctx.fill();
+                    // סימון שאפשר לקפוץ
+                    ctx.fillStyle = '#cfd8dc';
+                    ctx.font = '12px Arial';
+                    // ctx.fillText('JUMP', -15, 0); 
+                } else if (obs.type === 'snowman') {
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, obs.width/2, 0, Math.PI*2);
+                    ctx.arc(0, -obs.width/1.5, obs.width/3, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = 'orange';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -obs.width/1.5);
+                    ctx.lineTo(10, -obs.width/1.5 + 2);
+                    ctx.lineTo(0, -obs.width/1.5 + 4);
+                    ctx.fill();
+                }
+                ctx.restore();
+            });
+
+            // ציור שחקן
+            ctx.save();
+            
+            // צל שחקן (נשאר על הקרקע)
+            ctx.translate(player.x, player.y);
+            ctx.scale(1 - (player.z / 200), 1 - (player.z / 200)); // צל קטן כשעולים
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(0, 25, 20, 8, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore(); // איפוס כדי לצייר את השחקן בגובה הנכון
+
+            // גוף השחקן (זז לפי גובה Z)
+            ctx.save();
+            ctx.translate(player.x, player.y - player.z); // עולים למעלה לפי Z
+            ctx.rotate(player.angle * Math.PI / 180);
+            
+            // סנובורד
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.roundRect(-20, -5, 40, 60, 10);
+            ctx.fill();
+
+            // גולש
+            ctx.fillStyle = '#e53935'; 
+            ctx.fillRect(-12, -25, 24, 30);
+            
+            // צעיף (זז כשקופצים)
+            if (player.isJumping) {
+                ctx.fillStyle = '#ffeb3b';
+                ctx.beginPath();
+                ctx.moveTo(8, -25);
+                ctx.lineTo(25, -35);
+                ctx.lineTo(25, -20);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#ffccbc'; 
+            ctx.beginPath();
+            ctx.arc(0, -35, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#37474f';
+            ctx.fillRect(-8, -38, 16, 6);
+
+            ctx.restore();
+        }
+    </script>
+</body>
+</html>
